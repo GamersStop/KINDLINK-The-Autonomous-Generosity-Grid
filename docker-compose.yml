@@ -30,6 +30,11 @@ services:
       - PORT=8000
       - PYTHONPATH=/app
       - DATABASE_URL=postgresql://kindlink:kindlink_secret_password@db:5432/kindlink_db
+      - SOLANA_PAYER_PRIVATE_KEY=${SOLANA_PAYER_PRIVATE_KEY}
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-https://api.devnet.solana.com}
+      - SOLANA_ESCROW_PUBKEY=${SOLANA_ESCROW_PUBKEY}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     volumes:
       - ./backend:/app
     depends_on:

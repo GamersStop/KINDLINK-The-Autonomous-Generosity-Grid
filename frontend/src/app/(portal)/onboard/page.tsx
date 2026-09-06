@@ -6,55 +6,117 @@ import {
     ArrowLeft,
     Building2,
     ShieldCheck,
-    MapPin,
-    Radio,
     CheckCircle2,
     ArrowRight,
-    FileText,
     Sparkles,
     AlertCircle,
     Truck,
-    Users,
     Lock,
     PhoneCall,
-    MessageSquare
+    MessageSquare,
+    Radio,
+    AlertTriangle,
+    RefreshCw,
+    Eye,
+    EyeOff
 } from "lucide-react";
 
 export default function OnboardNGOPage() {
     const [currentStep, setCurrentStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCompleted, setIsCompleted] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
 
-    // Form State
+    // Form State with password credentials
     const [formData, setFormData] = useState({
-        orgName: "Rapid Response Alliance",
-        regNumber: "NGO-DL-2024-8841",
+        orgName: "",
+        regNumber: "",
         orgType: "Disaster Response",
-        leadName: "Arjun Verma",
+        leadName: "",
         leadRole: "Ground Operations Lead",
-        leadPhone: "+91 98765 43210",
-        leadEmail: "arjun@rapidresponse.org",
+        leadPhone: "",
+        leadEmail: "",
+        password: "",
+        confirmPassword: "",
         operationalZones: ["Kerala Coast", "Assam Delta"],
-        activePersonnel: 45,
-        vehicleFleet: ["3x 4WD Cargo Trucks", "2x Inflatable Zodiac Boats"],
-        alertChannel: "SMS + WhatsApp Fallback",
-        solanaTreasuryAddress: "7XwKe...9pQz (Devnet Testnet Ready)",
+        activePersonnel: 15,
+        vehicleFleet: ["4WD Cargo Trucks", "Inflatable Rafts"],
+        alertChannel: "SMS & WhatsApp",
+        solanaTreasuryAddress: "",
         acceptsAutoRouting: true,
     });
 
-    const handleNextStep = () => {
-        if (currentStep < 3) {
-            setCurrentStep((prev) => prev + 1);
-        } else {
+    const handleNextStep = async () => {
+        setErrorMessage(null);
+
+        // Validation for Step 1
+        if (currentStep === 1) {
+            if (
+                !formData.orgName.trim() ||
+                !formData.regNumber.trim() ||
+                !formData.leadName.trim() ||
+                !formData.leadPhone.trim() ||
+                !formData.leadEmail.trim()
+            ) {
+                setErrorMessage("Please fill all mandatory organization details and charter registration.");
+                return;
+            }
+            if (!formData.password) {
+                setErrorMessage("Please choose a secure password for your NGO account.");
+                return;
+            }
+            if (formData.password.length < 8) {
+                setErrorMessage("Password must be at least 8 characters long.");
+                return;
+            }
+            if (formData.password !== formData.confirmPassword) {
+                setErrorMessage("Passwords do not match. Please re-verify.");
+                return;
+            }
+            setCurrentStep(2);
+            return;
+        }
+
+        // Validation for Step 2
+        if (currentStep === 2) {
+            if (formData.operationalZones.length === 0 || !formData.operationalZones[0]) {
+                setErrorMessage("Please specify at least one target operational zone.");
+                return;
+            }
+            setCurrentStep(3);
+            return;
+        }
+
+        // Step 3: Submit to PostgreSQL
+        if (currentStep === 3) {
             setIsSubmitting(true);
-            setTimeout(() => {
-                setIsSubmitting(false);
+            try {
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                const { confirmPassword, ...payload } = formData;
+
+                const res = await fetch(`${apiUrl}/api/v1/ngo-auth/onboard`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.detail || `Server returned error status ${res.status}`);
+                }
+
                 setIsCompleted(true);
-            }, 1000);
+            } catch (err: any) {
+                setErrorMessage(err.message || "Failed to submit verification.");
+            } finally {
+                setIsSubmitting(false);
+            }
         }
     };
 
     const handlePrevStep = () => {
+        setErrorMessage(null);
         if (currentStep > 1) {
             setCurrentStep((prev) => prev - 1);
         }
@@ -62,7 +124,6 @@ export default function OnboardNGOPage() {
 
     return (
         <div className="max-w-5xl mx-auto px-5 sm:px-8 py-10 lg:py-14 space-y-10">
-
             {/* Top Breadcrumb & Status */}
             <div className="flex items-center justify-between">
                 <Link
@@ -94,7 +155,6 @@ export default function OnboardNGOPage() {
                     { step: 2, title: "Operational Assets & Range", icon: Truck },
                     { step: 3, title: "Dispatch & Verification", icon: ShieldCheck },
                 ].map((item) => {
-                    const Icon = item.icon;
                     const isActive = currentStep === item.step;
                     const isDone = currentStep > item.step || isCompleted;
 
@@ -121,58 +181,120 @@ export default function OnboardNGOPage() {
                 })}
             </div>
 
+            {/* Error Message */}
+            {errorMessage && (
+                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{errorMessage}</span>
+                </div>
+            )}
+
             {/* Step Content Card */}
             {!isCompleted ? (
                 <div className="p-7 sm:p-9 rounded-3xl bg-white border border-slate-200 shadow-soft space-y-8">
-
-                    {/* STEP 1: Organization Profile */}
+                    {/* STEP 1: Organization Profile & Auth Credentials */}
                     {currentStep === 1 && (
                         <div className="space-y-6">
                             <div className="space-y-1">
-                                <h2 className="text-lg font-bold text-slate-900">Entity Details & Legal Registration</h2>
+                                <h2 className="text-lg font-bold text-slate-900">Entity Details & Access Credentials</h2>
                                 <p className="text-xs text-slate-500">
-                                    Ensure public credentials match your official disaster relief charter or registry.
+                                    Charter registration numbers must be unique to avoid duplicate entity credentials.
                                 </p>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-700">Official Organization Name</label>
+                                    <label className="text-xs font-bold text-slate-700">Official Organization Name *</label>
                                     <input
                                         type="text"
+                                        required
                                         value={formData.orgName}
+                                        placeholder="e.g. Rapid Response Alliance"
                                         onChange={(e) => setFormData({ ...formData, orgName: e.target.value })}
                                         className="w-full p-3 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 text-slate-800"
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-700">Registration / Charter ID</label>
+                                    <label className="text-xs font-bold text-slate-700">Registration / Charter ID (Unique) *</label>
                                     <input
                                         type="text"
+                                        required
                                         value={formData.regNumber}
+                                        placeholder="e.g. NGO-MH-2026-9901"
                                         onChange={(e) => setFormData({ ...formData, regNumber: e.target.value })}
                                         className="w-full p-3 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 text-slate-800 font-mono"
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-700">Primary Contact Person</label>
+                                    <label className="text-xs font-bold text-slate-700">Primary Contact Person *</label>
                                     <input
                                         type="text"
+                                        required
                                         value={formData.leadName}
+                                        placeholder="e.g. Arjun Verma"
                                         onChange={(e) => setFormData({ ...formData, leadName: e.target.value })}
                                         className="w-full p-3 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 text-slate-800"
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-700">Field Dispatch Phone (24/7)</label>
+                                    <label className="text-xs font-bold text-slate-700">Field Dispatch Phone (24/7) *</label>
                                     <input
                                         type="tel"
+                                        required
                                         value={formData.leadPhone}
+                                        placeholder="+91 98765 43210"
                                         onChange={(e) => setFormData({ ...formData, leadPhone: e.target.value })}
                                         className="w-full p-3 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 text-slate-800 font-mono"
+                                    />
+                                </div>
+
+                                <div className="sm:col-span-2 space-y-1.5">
+                                    <label className="text-xs font-bold text-slate-700">Lead Email Address *</label>
+                                    <input
+                                        type="email"
+                                        required
+                                        value={formData.leadEmail}
+                                        placeholder="operations@responsealliance.org"
+                                        onChange={(e) => setFormData({ ...formData, leadEmail: e.target.value })}
+                                        className="w-full p-3 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 text-slate-800"
+                                    />
+                                </div>
+
+                                {/* Password Field */}
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-slate-700">Create Access Password *</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            required
+                                            value={formData.password}
+                                            placeholder="Minimum 8 characters"
+                                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                            className="w-full p-3 pr-10 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 text-slate-800"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        >
+                                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Confirm Password Field */}
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-slate-700">Confirm Password *</label>
+                                    <input
+                                        type={showPassword ? "text" : "password"}
+                                        required
+                                        value={formData.confirmPassword}
+                                        placeholder="Re-type password"
+                                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                                        className="w-full p-3 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 text-slate-800"
                                     />
                                 </div>
                             </div>
@@ -191,7 +313,7 @@ export default function OnboardNGOPage() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-700">Target Operating Zones</label>
+                                    <label className="text-xs font-bold text-slate-700">Target Operating Zones (comma separated)</label>
                                     <input
                                         type="text"
                                         value={formData.operationalZones.join(", ")}
@@ -202,14 +324,15 @@ export default function OnboardNGOPage() {
                                             })
                                         }
                                         className="w-full p-3 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 text-slate-800"
-                                        placeholder="e.g. Kerala Coast, Assam Delta"
+                                        placeholder="e.g. Kerala Coast, Assam Delta, Ward 7"
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-700">Active Ground Volunteers</label>
+                                    <label className="text-xs font-bold text-slate-700">Active Ground Volunteers Count</label>
                                     <input
                                         type="number"
+                                        min="1"
                                         value={formData.activePersonnel}
                                         onChange={(e) =>
                                             setFormData({ ...formData, activePersonnel: Number(e.target.value) })
@@ -219,7 +342,7 @@ export default function OnboardNGOPage() {
                                 </div>
 
                                 <div className="sm:col-span-2 space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-700">Specialized Fleet & Gear</label>
+                                    <label className="text-xs font-bold text-slate-700">Specialized Fleet & Gear (comma separated)</label>
                                     <input
                                         type="text"
                                         value={formData.vehicleFleet.join(", ")}
@@ -270,7 +393,7 @@ export default function OnboardNGOPage() {
                                         type="button"
                                         onClick={() => setFormData({ ...formData, alertChannel: channel.title })}
                                         className={`p-4 rounded-2xl text-left border transition space-y-2 ${formData.alertChannel.includes(channel.title)
-                                                ? "bg-cyan-50/70 border-[#0284C7] shadow-sm"
+                                                ? "bg-cyan-50/70 border-[#0284C7] shadow-xs"
                                                 : "bg-slate-50 border-slate-200 hover:bg-slate-100"
                                             }`}
                                     >
@@ -292,8 +415,8 @@ export default function OnboardNGOPage() {
                                     onChange={(e) =>
                                         setFormData({ ...formData, solanaTreasuryAddress: e.target.value })
                                     }
-                                    className="w-full p-2.5 text-xs font-mono rounded-xl bg-white border border-purple-200 text-purple-900"
-                                    placeholder="Enter organization SPL wallet for emergency fuel blinks"
+                                    className="w-full p-2.5 text-xs font-mono rounded-xl bg-white border border-purple-200 text-purple-900 focus:outline-none"
+                                    placeholder="Enter organization SPL wallet address"
                                 />
                             </div>
                         </div>
@@ -304,7 +427,7 @@ export default function OnboardNGOPage() {
                         <button
                             type="button"
                             onClick={handlePrevStep}
-                            disabled={currentStep === 1}
+                            disabled={currentStep === 1 || isSubmitting}
                             className="text-xs font-bold text-slate-500 hover:text-slate-900 transition disabled:opacity-30"
                         >
                             Previous
@@ -314,10 +437,12 @@ export default function OnboardNGOPage() {
                             type="button"
                             onClick={handleNextStep}
                             disabled={isSubmitting}
-                            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs sm:text-sm font-bold transition active:scale-95 shadow-sm disabled:opacity-50"
+                            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs sm:text-sm font-bold transition active:scale-95 shadow-xs disabled:opacity-50"
                         >
                             {isSubmitting ? (
-                                "Connecting to Grid..."
+                                <>
+                                    <RefreshCw className="w-4 h-4 animate-spin" /> Verifying &amp; Persisting...
+                                </>
                             ) : currentStep === 3 ? (
                                 <>Complete Verification <CheckCircle2 className="w-4 h-4" /></>
                             ) : (
@@ -325,7 +450,6 @@ export default function OnboardNGOPage() {
                             )}
                         </button>
                     </div>
-
                 </div>
             ) : (
                 /* Onboarding Success View */
@@ -339,22 +463,22 @@ export default function OnboardNGOPage() {
                             Welcome to the Grid, {formData.orgName}!
                         </h2>
                         <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                            Your responder profile is verified and active. Autonomous dispatches matching your fleet capacity and zones will now route directly to your alert channels.
+                            Your responder profile is verified and active with registration key <span className="font-mono font-bold text-slate-800">{formData.regNumber}</span>. Autonomous dispatches matching your fleet capacity and zones will now route directly to your alert channels.
                         </p>
                     </div>
 
                     <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
                         <Link
                             href="/ngo"
-                            className="px-5 py-2.5 rounded-full bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs sm:text-sm font-bold shadow-sm transition active:scale-95"
+                            className="px-5 py-2.5 rounded-full bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs sm:text-sm font-bold shadow-xs transition active:scale-95"
                         >
                             Test Need Decomposer
                         </Link>
                         <Link
-                            href="/"
+                            href="/live-grid"
                             className="px-5 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold transition active:scale-95"
                         >
-                            Return to Grid Telemetry
+                            View Capacity on Live Grid
                         </Link>
                     </div>
                 </div>
@@ -367,7 +491,6 @@ export default function OnboardNGOPage() {
                     Verified NGO accounts receive cryptographic signatures on incident reports, priority queue allocation on Solana Devnet fuel micro-grants, and direct audio bridges to SOS Sentinel victims.
                 </p>
             </div>
-
         </div>
     );
 }

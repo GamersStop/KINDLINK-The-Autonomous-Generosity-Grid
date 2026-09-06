@@ -1,13 +1,18 @@
 from pydantic import BaseModel, Field
 from typing import List, Literal
 
+class PleaRequest(BaseModel):
+    rawPlea: str = Field(..., min_length=5, description="Unstructured emergency distress text")
+
 class SKUItem(BaseModel):
     id: str
-    category: Literal["water", "food", "medical", "shelter", "logistics"]
+    category: Literal["ration", "labour", "skill", "money", "logistics", "medical"] = Field(
+        ..., description="Category of the unbundled aid unit"
+    )
     title: str
     targetQty: int
     raisedQty: int = 0
-    unit: str
+    unit: str  # e.g., 'SOL', 'Hours', 'Days', 'Packets', 'Volunteers'
     urgency: Literal["CRITICAL", "HIGH", "NORMAL"]
 
 class DecompositionResponse(BaseModel):
@@ -18,6 +23,3 @@ class DecompositionResponse(BaseModel):
     summary: str
     priorityScore: int
     items: List[SKUItem]
-
-class PleaRequest(BaseModel):
-    rawPlea: str = Field(..., min_length=5, description="Raw unstructured distress report")

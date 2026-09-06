@@ -4,6 +4,7 @@ from typing import List
 from sqlmodel import Session, select
 from src.schemas.mission import MissionBroadcastRequest, MissionBroadcastResponse
 from src.models.mission import Mission, MissionItem
+from sqlalchemy.orm import selectinload
 
 class MissionService:
     @staticmethod
@@ -61,7 +62,7 @@ class MissionService:
 
     @staticmethod
     def get_all_missions(session: Session) -> List[Mission]:
-        statement = select(Mission)
+        statement = select(Mission).options(selectinload(Mission.items))
         return list(session.exec(statement).all())
 
 mission_service = MissionService()
