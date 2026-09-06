@@ -40,74 +40,82 @@ interface ParsedDecomposition {
     items: SKUItem[];
 }
 
+interface BroadcastResult {
+    missionId: string;
+    status: string;
+    escrowAllocatedSol: number;
+    broadcastTimestamp: string;
+    message: string;
+}
+
 export default function NGONeedDecomposerPage() {
-    const [rawPlea, setRawPlea] = useState(
-        "Sector 4 Primary School is marooned by floodwater reaching 4 feet. Around 120 civilians, including 25 children and 14 senior citizens, have evacuated to the terrace. Drinking water ran out 6 hours ago. Immediate need for 500 liters of potable water, 120 ready-to-eat dry meal kits, and 1 inflatable rescue raft for elderly medical evacuations. Grid power is down."
-    );
+    const [rawPlea, setRawPlea] = useState("");
     const [isProcessing, setIsProcessing] = useState(false);
     const [isDispatched, setIsDispatched] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    // Live parsed decomposition state
-    const [decomposition, setDecomposition] = useState<ParsedDecomposition | null>({
-        incidentZone: "Sector 4 Primary School, North Delta",
-        extractedCoordinates: "10.0245° N, 76.3088° E",
-        reportedTimestamp: "6 mins ago",
-        affectedCount: 120,
-        summary: "Terrace evacuation due to 4ft water logging. Critical potable water deficit and geriatric evacuation required.",
-        priorityScore: 94,
-        items: [
-            {
-                id: "sku-1",
-                category: "water",
-                title: "Potable Drinking Water Cans",
-                targetQty: 500,
-                raisedQty: 180,
-                unit: "Liters",
-                urgency: "CRITICAL"
-            },
-            {
-                id: "sku-2",
-                category: "food",
-                title: "Ready-to-Eat Emergency Meals",
-                targetQty: 120,
-                raisedQty: 75,
-                unit: "Packs",
-                urgency: "HIGH"
-            },
-            {
-                id: "sku-3",
-                category: "logistics",
-                title: "Inflatable Shallow-Draft Rescue Raft",
-                targetQty: 1,
-                raisedQty: 0,
-                unit: "Vessel",
-                urgency: "CRITICAL"
-            },
-            {
-                id: "sku-4",
-                category: "medical",
-                title: "Geriatric First Aid & ORS Salts",
-                targetQty: 25,
-                raisedQty: 12,
-                unit: "Kits",
-                urgency: "HIGH"
-            }
-        ]
-    });
+    const [isBroadcasting, setIsBroadcasting] = useState(false);
+    const [broadcastData, setBroadcastData] = useState<BroadcastResult | null>(null);
+    // Parsed decomposition state populated only via Gemini API
+    const [decomposition, setDecomposition] = useState<ParsedDecomposition | null>(null);
 
-    const handleDecompose = () => {
+    const handleDecompose = async () => {
         if (!rawPlea.trim()) return;
         setIsProcessing(true);
         setIsDispatched(false);
+        setErrorMessage(null);
 
-        // Simulates Gemini 2.5 Flash structured decomposition
-        setTimeout(() => {
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            // Ensure this matches your FastAPI router path (/api/v1/aid/decompose or /api/decompose)
+            const response = await fetch(`${apiUrl}/api/v1/aid/decompose`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rawPlea: rawPlea.trim() }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `Server returned ${response.status}`);
+            }
+
+            const data: ParsedDecomposition = await response.json();
+            setDecomposition(data);
+        } catch (err: any) {
+            console.error("FastAPI decomposition error:", err);
+            setErrorMessage(err.message || "Failed to decompose plea. Please check the backend connection.");
+        } finally {
             setIsProcessing(false);
-        }, 900);
+        }
     };
 
-    const handleBroadcast = () => {
-        setIsDispatched(true);
+    const handleBroadcast = async () => {
+        if (!decomposition) return;
+        setIsBroadcasting(true);
+        setErrorMessage(null);
+
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const response = await fetch(`${apiUrl}/api/v1/aid/missions/broadcast`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(decomposition),
+            });
+
+            if (!response.ok) {
+                const errorJson = await response.json().catch(() => ({}));
+                throw new Error(errorJson.detail || "Failed to broadcast mission.");
+            }
+
+            const data: BroadcastResult = await response.json();
+            setBroadcastData(data);
+            setIsDispatched(true);
+        } catch (err: any) {
+            console.error("Broadcast failed:", err);
+            setErrorMessage(err.message || "Unable to broadcast mission to the network.");
+        } finally {
+            setIsBroadcasting(false);
+        }
     };
 
     const getUrgencyBadge = (urgency: string) => {
@@ -137,7 +145,7 @@ export default function NGONeedDecomposerPage() {
     return (
         <div className="max-w-6xl mx-auto px-5 sm:px-8 py-10 lg:py-14 space-y-8">
 
-            {/* Top Breadcrumb & Actions */}
+            {/* Top Breadcrumb & Indicator */}
             <div className="flex items-center justify-between">
                 <Link
                     href="/"
@@ -183,11 +191,23 @@ export default function NGONeedDecomposerPage() {
                             className="w-full text-sm leading-relaxed p-4 rounded-2xl bg-slate-50/70 border border-slate-200 focus:border-[#0284C7] focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 transition resize-none text-slate-800"
                         />
 
+                        {errorMessage && (
+                            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                                <span>{errorMessage}</span>
+                            </div>
+                        )}
+
                         <div className="flex items-center justify-between gap-3 pt-2">
                             <button
                                 type="button"
-                                onClick={() => setRawPlea("")}
-                                className="text-xs font-semibold text-slate-400 hover:text-slate-600 transition"
+                                onClick={() => {
+                                    setRawPlea("");
+                                    setDecomposition(null);
+                                    setErrorMessage(null);
+                                }}
+                                disabled={!rawPlea}
+                                className="text-xs font-semibold text-slate-400 hover:text-slate-600 transition disabled:opacity-30"
                             >
                                 Clear
                             </button>
@@ -248,7 +268,7 @@ export default function NGONeedDecomposerPage() {
                                 </div>
                             </div>
 
-                            {/* Parsed Human Context Summary */}
+                            {/* Parsed Context Summary */}
                             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-start gap-3">
                                 <Users className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />
                                 <div className="text-xs sm:text-sm text-slate-700 leading-relaxed">
@@ -263,12 +283,14 @@ export default function NGONeedDecomposerPage() {
                                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                                         Structured Resource Units (SKUs)
                                     </h3>
-                                    <span className="text-xs text-slate-500 font-mono">4 Target Requirements</span>
+                                    <span className="text-xs text-slate-500 font-mono">
+                                        {decomposition.items.length} Target {decomposition.items.length === 1 ? "Requirement" : "Requirements"}
+                                    </span>
                                 </div>
 
                                 <div className="space-y-3">
                                     {decomposition.items.map((item) => {
-                                        const percentage = Math.min(100, Math.round((item.raisedQty / item.targetQty) * 100));
+                                        const percentage = Math.min(100, Math.round(((item.raisedQty || 0) / (item.targetQty || 1)) * 100));
                                         return (
                                             <div
                                                 key={item.id}
@@ -300,10 +322,10 @@ export default function NGONeedDecomposerPage() {
                                                 <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
                                                     <div
                                                         className={`h-full rounded-full transition-all duration-500 ${percentage >= 80
-                                                                ? "bg-teal-500"
-                                                                : percentage >= 40
-                                                                    ? "bg-[#0284C7]"
-                                                                    : "bg-amber-500"
+                                                            ? "bg-teal-500"
+                                                            : percentage >= 40
+                                                                ? "bg-[#0284C7]"
+                                                                : "bg-amber-500"
                                                             }`}
                                                         style={{ width: `${percentage}%` }}
                                                     />
@@ -320,17 +342,39 @@ export default function NGONeedDecomposerPage() {
                                     Publishing unblocks this plea for proximity-based volunteer matching and Solana devnet micro-grants.
                                 </p>
 
-                                {isDispatched ? (
-                                    <div className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 text-xs font-bold">
-                                        <CheckCircle2 className="w-4 h-4 text-teal-600" /> Active on Grid
+                                {isDispatched && broadcastData ? (
+                                    <div className="w-full sm:w-auto p-3 rounded-2xl bg-teal-50 border border-teal-200 text-teal-800 text-xs flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                        <div className="flex items-center gap-1.5 font-bold">
+                                            <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                                            <span>Node {broadcastData.missionId} Active</span>
+                                        </div>
+                                        <span className="hidden sm:inline text-teal-300">•</span>
+                                        <span className="font-mono text-[11px] text-teal-700">
+                                            Escrow: <strong>{broadcastData.escrowAllocatedSol} SOL</strong>
+                                        </span>
+                                        <Link
+                                            href="/live-grid"
+                                            className="text-[11px] font-bold text-teal-900 underline hover:text-teal-950"
+                                        >
+                                            View on Grid &rarr;
+                                        </Link>
                                     </div>
                                 ) : (
                                     <button
                                         type="button"
                                         onClick={handleBroadcast}
-                                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs sm:text-sm font-bold transition active:scale-95 shadow-sm"
+                                        disabled={isBroadcasting}
+                                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs sm:text-sm font-bold transition active:scale-95 disabled:opacity-50 shadow-sm"
                                     >
-                                        <Send className="w-3.5 h-3.5" /> Publish to Grid Rails
+                                        {isBroadcasting ? (
+                                            <>
+                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Broadcasting...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Send className="w-3.5 h-3.5" /> Publish to Grid Rails
+                                            </>
+                                        )}
                                     </button>
                                 )}
                             </div>
@@ -341,7 +385,7 @@ export default function NGONeedDecomposerPage() {
                             <Layers className="w-8 h-8 text-slate-300 mx-auto" />
                             <p className="text-sm font-semibold text-slate-600">No plea currently decomposed</p>
                             <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                                Paste a message on the left and click Decompose to extract actionable SKUs.
+                                Paste an unstructured message on the left and click Decompose to extract actionable SKUs.
                             </p>
                         </div>
                     )}
